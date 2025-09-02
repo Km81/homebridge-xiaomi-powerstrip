@@ -1,5 +1,5 @@
 {
-  "name": "@km81/homebridge-xiaomi-powerstrip",
+  "name": "homebridge-xiaomi-powerstrip",
   "version": "0.1.0",
   "description": "Homebridge plugin for Xiaomi MiOT Power Strip / Smart Plug with power & LED and temperature.",
   "main": "index.js",
