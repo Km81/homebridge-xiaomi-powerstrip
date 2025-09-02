@@ -39,6 +39,18 @@
               "type": "integer",
               "default": 15000,
               "minimum": 3000
+            },
+            "protocolMode": {
+              "title": "프로토콜 모드",
+              "type": "string",
+              "enum": ["auto", "miot", "legacy"],
+              "default": "auto",
+              "description": "문제 해결용 강제 모드. 기본은 auto."
+            },
+            "debug": {
+              "title": "디버그 로그 출력",
+              "type": "boolean",
+              "default": false
             }
           }
         }
@@ -55,7 +67,9 @@
         "deviceCfgs[].ip",
         "deviceCfgs[].token",
         "deviceCfgs[].serialNumber",
-        "deviceCfgs[].pollingInterval"
+        "deviceCfgs[].pollingInterval",
+        "deviceCfgs[].protocolMode",
+        "deviceCfgs[].debug"
       ]
     }
   ]
