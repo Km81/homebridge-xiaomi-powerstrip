@@ -3,7 +3,7 @@ const miio = require('miio');
 let PlatformAccessory, Service, Characteristic, UUIDGen;
 
 const PLATFORM_NAME = 'XiaomiPowerStripPlatform';
-const PLUGIN_NAME = 'homebridge-xiaomi-powerstrip'; // ← unscoped로 변경
+const PLUGIN_NAME = 'homebridge-xiaomi-powerstrip-km81'; // ← 새로운 패키지명
 
 module.exports = (api) => {
   PlatformAccessory = api.platformAccessory;
@@ -59,7 +59,6 @@ class XiaomiPowerStripPlatform {
       }
     }
 
-    // 메인 악세서리만 정리
     const accessoriesToUnregister = this.accessories.filter(
       (acc) => acc.context?.isChild !== true && !foundMainUUIDs.has(acc.UUID)
     );
@@ -207,7 +206,6 @@ class DeviceHandler {
       });
     });
 
-    // Temperature
     if (this.showTemperature) {
       const name = `${this.config.name} Temperature`;
       const svc = this.accessory.getServiceById(Service.TemperatureSensor, 'Temperature')
@@ -216,7 +214,6 @@ class DeviceHandler {
       this.children.temp = { acc: this.accessory, svc };
     }
 
-    // LED
     if (this.showLED) {
       const name = `${this.config.name} LED`;
       const svc = this.accessory.getServiceById(Service.Switch, 'LED')
@@ -238,27 +235,4 @@ class DeviceHandler {
   }
 
   updateAllCharacteristics() {
-    // Outlets
     this.outletSvcs.forEach(({ svc, outletIdx }) => {
-      const on = !!this.state[`outlet_${outletIdx}_on`];
-      svc.updateCharacteristic(Characteristic.On, on);
-      if (svc.testCharacteristic && svc.testCharacteristic(Characteristic.OutletInUse)) {
-        const power = Number(this.state.powerW);
-        const inUse = Number.isFinite(power) ? power > this.powerInUseThreshold : on;
-        try { svc.updateCharacteristic(Characteristic.OutletInUse, inUse); } catch (_) {}
-      }
-    });
-
-    // Temperature
-    if (this.children?.temp?.svc) {
-      const t = Number(this.state.temperature);
-      const value = Number.isFinite(t) ? t : 0;
-      this.children.temp.svc.updateCharacteristic(Characteristic.CurrentTemperature, value);
-    }
-
-    // LED
-    if (this.children?.led?.svc) {
-      this.children.led.svc.updateCharacteristic(Characteristic.On, !!this.state.ledOn);
-    }
-  }
-}
