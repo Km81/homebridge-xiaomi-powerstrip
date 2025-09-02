@@ -7,7 +7,7 @@ let PlatformAccessory, Service, Characteristic, UUIDGen;
 const PLATFORM_NAME = 'XiaomiPowerStripPlatform';
 const PLUGIN_NAME = 'homebridge-xiaomi-powerstrip-km81';
 
-// MIoT 기본 매핑
+// MIoT 기본 매핑 (가능하면 사용)
 const PROP_SWITCH = { siid: 2, piid: 1 };   // switch:on
 const PROP_POWER_W = { siid: 3, piid: 1 };  // power-consumption:surge-power
 
@@ -104,7 +104,8 @@ class SingleSwitchDevice {
     this.switchService.getCharacteristic(Characteristic.On).onSet(async (value) => {
       const boolVal = !!value;
       try {
-        this.state.on = boolVal; // optimistic
+        // optimistic: 즉시 UI 반영
+        this.state.on = boolVal;
         this.switchService.updateCharacteristic(Characteristic.On, boolVal);
 
         if (this.mode === 'legacy') {
@@ -114,6 +115,7 @@ class SingleSwitchDevice {
         }
       } catch (e) {
         this.log.error(this.prefix(`전원 설정 실패: ${e.message}`));
+        // 실패 시 실제 상태 동기화
         setTimeout(() => this.poll(), 400);
         throw e;
       }
@@ -135,14 +137,12 @@ class SingleSwitchDevice {
   async connect() {
     try {
       this.log.info(this.prefix(`연결 시도... (${this.cfg.ip})`));
-      // 참고 플러그인처럼 model을 넘길 수 있게
-      // miio는 최신에선 miio.device(...)가 일반적이지만, 옵션 객체에 model 넣어도 무방
       this.device = await miio.device({
         address: this.cfg.ip,
         token: this.cfg.token,
-        model: this.cfg.model // 선택값
+        model: this.cfg.model // 선택값 (있으면 전달)
       });
-      // createDevice().init() 스타일 사용이 필요한 구버전 대응
+      // 구식 드라이버 호환
       if (this.device && typeof this.device.init === 'function') {
         try { await this.device.init(); } catch (_) {}
       }
@@ -158,13 +158,14 @@ class SingleSwitchDevice {
     }
   }
 
+  // ===== 폴링 =====
   async poll() {
     if (!this.device) return;
 
     if (this.mode === 'legacy') return this.legacyPoll();
     if (this.mode === 'miot')   return this.miotPoll();
 
-    // auto: 먼저 miot, 실패 시 legacy
+    // auto: miot 먼저, 실패 시 legacy
     try {
       await this.miotPoll();
       if (this.mode === 'auto') this.mode = 'miot';
@@ -176,11 +177,12 @@ class SingleSwitchDevice {
         this.log.warn(this.prefix('MIoT 미지원 → Legacy 모드 전환'));
         return this.legacyPoll();
       }
+      // 다른 오류면 그대로 기록
       this.log.error(this.prefix(`상태 폴링 실패(MIoT): ${msg}`));
     }
   }
 
-  // ====== MIoT ======
+  // ===== MIoT =====
   async miotPoll() {
     const req = [
       { siid: PROP_SWITCH.siid, piid: PROP_SWITCH.piid },
@@ -223,41 +225,9 @@ class SingleSwitchDevice {
     setTimeout(() => this.poll(), 250);
   }
 
-  // ====== Legacy ======
-  // 0단계: 고수준 추상 메서드 우선 시도 (miio가 모델별로 적합한 RPC를 선택)
-  async legacyHighLevelGetPower() {
-    try {
-      if (this.device && typeof this.device.power === 'function') {
-        this.dlog('Legacy high-level power() 호출');
-        const v = await this.device.power();   // boolean | "on"/"off" | number | undefined
-        this.dlog('Legacy power() 응답:', this.safeJSON(v));
-        const b = this.normalizeBool(v);
-        return (typeof b !== 'undefined') ? b : undefined;
-      }
-    } catch (e) {
-      this.dlog('power() 호출 오류:', e?.message || e);
-    }
-    return undefined;
-  }
-
-  async legacyHighLevelSetPower(value) {
-    try {
-      if (this.device && typeof this.device.setPower === 'function') {
-        this.dlog('Legacy high-level setPower():', value);
-        const r = await this.device.setPower(!!value);
-        this.dlog('Legacy setPower 응답:', this.safeJSON(r));
-        // 보통 'ok' 또는 true 반환
-        return true;
-      }
-    } catch (e) {
-      this.dlog('setPower() 호출 오류:', e?.message || e);
-    }
-    return false;
-  }
-
+  // ===== Legacy =====
+  // 상태 키 우선순위: power → relay_status → switch → state → enable → plug_status → plug_state → switch_status → on
   get legacyKeyCombos() {
-    // 배열 응답의 첫 값이 상태, 두 번째가 전력인 조합들을 우선 시도.
-    // (로그에서 'on'은 null이므로 'power'부터 시도)
     return [
       { method: 'get_prop', keys: ['power', 'power_consume_rate'] },
       { method: 'get_prop', keys: ['relay_status', 'power_consume_rate'] },
@@ -267,9 +237,9 @@ class SingleSwitchDevice {
       { method: 'get_prop', keys: ['plug_status', 'power_consume_rate'] },
       { method: 'get_prop', keys: ['plug_state', 'power_consume_rate'] },
       { method: 'get_prop', keys: ['switch_status', 'power_consume_rate'] },
-      { method: 'get_prop', keys: ['on', 'power_consume_rate'] }, // 당신 모델에선 null
-      { method: 'get_status', keys: [] },
-      { method: 'get_power',  keys: [] }
+      { method: 'get_prop', keys: ['on', 'power_consume_rate'] }, // 일부 모델에선 null만 옴
+      { method: 'get_status', keys: [] },  // 객체형 응답
+      { method: 'get_power',  keys: [] }   // 단일 상태
     ];
   }
 
@@ -281,19 +251,35 @@ class SingleSwitchDevice {
       if (s === 'on' || s === 'true' || s === '1') return true;
       if (s === 'off' || s === 'false' || s === '0') return false;
     }
-    return undefined;
+    return undefined; // 알 수 없음
   }
 
   async legacyPoll() {
-    // 0단계: 고수준 power()부터
-    let on = await this.legacyHighLevelGetPower();
+    let on = undefined;
     let powerW = this.state.powerW;
+    let lastErr = null;
 
+    // 1) 가장 가능성 높은 경로: get_prop(['power', 'power_consume_rate'])
+    try {
+      this.dlog('Legacy 요청(우선): get_prop ["power","power_consume_rate"]');
+      const resp = await this.device.call('get_prop', ['power', 'power_consume_rate']);
+      this.dlog('Legacy 응답(우선):', this.safeJSON(resp));
+      if (Array.isArray(resp)) {
+        const b = this.normalizeBool(resp[0]);
+        if (typeof b !== 'undefined') on = b;
+        const n = Number(resp[1]);
+        if (Number.isFinite(n)) powerW = n;
+      }
+    } catch (e) {
+      lastErr = e;
+    }
+
+    // 2) 아직 on을 못 얻었으면 나머지 조합 순회
     if (typeof on === 'undefined') {
-      // 1단계: 키 조합 순차 시도
-      let lastErr = null;
-
       for (const combo of this.legacyKeyCombos) {
+        // 첫 조합은 이미 시도했으므로 건너뛴다
+        if (combo.method === 'get_prop' && combo.keys.length === 2 && combo.keys[0] === 'power') continue;
+
         try {
           this.dlog('Legacy 요청:', combo.method, combo.keys);
           const resp = await this.device.call(combo.method, combo.keys);
@@ -337,13 +323,13 @@ class SingleSwitchDevice {
           lastErr = e;
         }
       }
-
-      if (typeof on === 'undefined' && lastErr) {
-        this.log.error(this.prefix(`(Legacy) 상태 폴링 실패: ${lastErr.message || lastErr}`));
-      }
     }
 
-    if (typeof on === 'undefined') on = this.state.on; // 여전히 모르면 유지
+    if (typeof on === 'undefined' && lastErr) {
+      this.log.error(this.prefix(`(Legacy) 상태 폴링 실패: ${lastErr.message || lastErr}`));
+    }
+
+    if (typeof on === 'undefined') on = this.state.on; // 여전히 모르면 기존 상태 유지
 
     this.state.on = !!on;
     this.state.powerW = powerW;
@@ -352,35 +338,43 @@ class SingleSwitchDevice {
   }
 
   async legacySetPower(value) {
-    // 0단계: 고수준 setPower() 우선
-    const ok = await this.legacyHighLevelSetPower(value);
-    if (ok) { setTimeout(() => this.poll(), 250); return; }
-
-    // 1단계: RPC 폴백
     const arg = value ? 'on' : 'off';
+
+    // 1) set_power('on'|'off')
     try {
       this.dlog('Legacy set_power:', arg);
       const res = await this.device.call('set_power', [arg]);
       this.dlog('Legacy set_power 응답:', this.safeJSON(res));
-      if (res === 'ok' || (Array.isArray(res) && res[0] === 'ok')) { setTimeout(() => this.poll(), 250); return; }
+      if (res === 'ok' || (Array.isArray(res) && res[0] === 'ok')) {
+        setTimeout(() => this.poll(), 250);
+        return;
+      }
     } catch (e) { this.dlog('set_power 오류:', e?.message || e); }
 
+    // 2) set_on(true/false)
     try {
       this.dlog('Legacy set_on:', value);
       const res2 = await this.device.call('set_on', [!!value]);
       this.dlog('Legacy set_on 응답:', this.safeJSON(res2));
-      if (res2 === 'ok' || (Array.isArray(res2) && res2[0] === 'ok')) { setTimeout(() => this.poll(), 250); return; }
+      if (res2 === 'ok' || (Array.isArray(res2) && res2[0] === 'ok')) {
+        setTimeout(() => this.poll(), 250);
+        return;
+      }
     } catch (e) { this.dlog('set_on 오류:', e?.message || e); }
 
+    // 3) 켜기 보조: toggle_plug (off는 보장 안 됨)
     if (value) {
       try {
         this.dlog('Legacy toggle_plug');
         const res3 = await this.device.call('toggle_plug', []);
         this.dlog('Legacy toggle_plug 응답:', this.safeJSON(res3));
-        if (res3 === 'ok' || (Array.isArray(res3) && res3[0] === 'ok')) { setTimeout(() => this.poll(), 250); return; }
+        if (res3 === 'ok' || (Array.isArray(res3) && res3[0] === 'ok')) {
+          setTimeout(() => this.poll(), 250);
+          return;
+        }
       } catch (e) { this.dlog('toggle_plug 오류:', e?.message || e); }
     }
 
-    throw new Error('setPower()/set_power/set_on/toggle_plug 모두 실패');
+    throw new Error('set_power / set_on / toggle_plug 모두 실패');
   }
 }
