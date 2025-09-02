@@ -1,7 +1,7 @@
 {
   "name": "homebridge-xiaomi-powerstrip-km81",
-  "version": "0.1.0",
-  "description": "Homebridge plugin for Xiaomi MiOT Power Strip / Smart Plug with power & LED and temperature.",
+  "version": "0.1.1",
+  "description": "Homebridge plugin for Xiaomi MiOT Power Strip (single unified switch control).",
   "main": "index.js",
   "keywords": [
     "homebridge-plugin",
@@ -9,8 +9,7 @@
     "miio",
     "miot",
     "powerstrip",
-    "smartplug",
-    "multitap"
+    "smartplug"
   ],
   "author": "Km81",
   "license": "ISC",
