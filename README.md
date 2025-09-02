@@ -1,5 +1,5 @@
 
-# homebridge-xiaomi-powerstrip
+# homebridge-xiaomi-powerstrip-km81
 
 샤오미 **멀티탭/플러그(MiOT 기반)**을 HomeKit에 연결하는 경량 Homebridge 플러그인입니다.  
 여러 개의 콘센트(채널)를 **Outlet** 또는 **Switch** 서비스로 노출하고, **전력(W)로 In Use 판단**, **LED 스위치**, **온도 센서**를 제공합니다.
