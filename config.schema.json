@@ -40,6 +40,11 @@
               "default": 15000,
               "minimum": 3000
             },
+            "model": {
+              "title": "Device Model (선택사항)",
+              "type": "string",
+              "description": "예: zimi.powerstrip.v2, chuangmi.plug.v3 등. 지정하면 인식 정확도가 향상됨"
+            },
             "protocolMode": {
               "title": "프로토콜 모드",
               "type": "string",
@@ -68,6 +73,7 @@
         "deviceCfgs[].token",
         "deviceCfgs[].serialNumber",
         "deviceCfgs[].pollingInterval",
+        "deviceCfgs[].model",
         "deviceCfgs[].protocolMode",
         "deviceCfgs[].debug"
       ]
