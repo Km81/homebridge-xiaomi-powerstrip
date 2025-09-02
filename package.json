@@ -1,5 +1,5 @@
 {
-  "name": "homebridge-xiaomi-powerstrip",
+  "name": "homebridge-xiaomi-powerstrip-km81",
   "version": "0.1.0",
   "description": "Homebridge plugin for Xiaomi MiOT Power Strip / Smart Plug with power & LED and temperature.",
   "main": "index.js",
@@ -14,13 +14,13 @@
   ],
   "author": "Km81",
   "license": "ISC",
-  "homepage": "https://github.com/Km81/homebridge-xiaomi-powerstrip",
+  "homepage": "https://github.com/Km81/homebridge-xiaomi-powerstrip-km81",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Km81/homebridge-xiaomi-powerstrip.git"
+    "url": "https://github.com/Km81/homebridge-xiaomi-powerstrip-km81.git"
   },
   "bugs": {
-    "url": "https://github.com/Km81/homebridge-xiaomi-powerstrip/issues"
+    "url": "https://github.com/Km81/homebridge-xiaomi-powerstrip-km81/issues"
   },
   "engines": {
     "node": ">=18.0.0",
