@@ -84,8 +84,12 @@ class SingleSwitchDevice {
     this.pollInterval = null;
     this.pollingMs = Math.max(3000, Number(this.cfg.pollingInterval ?? 15000));
 
-    // 통신 모드: auto → miot 우선, 실패 시 legacy
-    this.mode = 'auto'; // 'miot' | 'legacy'
+    // 모드: 'auto' | 'miot' | 'legacy'
+    this.mode = (this.cfg.protocolMode || 'auto').toLowerCase();
+    this.debugEnabled = !!this.cfg.debug;
+
+    // helper for debug
+    this.dlog = (...args) => { if (this.debugEnabled) this.log.info(this.prefix('[DEBUG]'), ...args); };
 
     // Accessory Info
     const info = this.accessory.getService(Service.AccessoryInformation);
@@ -98,12 +102,11 @@ class SingleSwitchDevice {
       this.accessory.getService(Service.Switch) ||
       this.accessory.addService(Service.Switch, this.cfg.name);
 
-    // On setter (낙관적 업데이트 + 모드별 제어)
+    // On setter (낙관적 업데이트)
     this.switchService.getCharacteristic(Characteristic.On).onSet(async (value) => {
       const boolVal = !!value;
       try {
-        // 낙관적으로 먼저 반영 (폴링 실패 시 되돌아가는 현상 방지)
-        this.state.on = boolVal;
+        this.state.on = boolVal; // optimistic
         this.switchService.updateCharacteristic(Characteristic.On, boolVal);
 
         if (this.mode === 'legacy') {
@@ -113,7 +116,6 @@ class SingleSwitchDevice {
         }
       } catch (e) {
         this.log.error(this.prefix(`전원 설정 실패: ${e.message}`));
-        // 실패 시 한 번 더 폴링하여 실제 상태 동기화
         setTimeout(() => this.poll(), 400);
         throw e;
       }
@@ -132,6 +134,7 @@ class SingleSwitchDevice {
 
   prefix(msg) { return `[${this.cfg.name}] ${msg}`; }
   key(p) { return `${p.siid}.${p.piid}`; }
+  safeJSON(obj) { try { return JSON.stringify(obj); } catch (_) { return String(obj); } }
 
   async connect() {
     try {
@@ -155,73 +158,83 @@ class SingleSwitchDevice {
     if (this.mode === 'legacy') {
       return this.legacyPoll();
     }
+    if (this.mode === 'miot') {
+      return this.miotPoll();
+    }
 
-    // 1) MIoT 먼저 시도
+    // auto: miot 먼저, 실패하면 legacy
     try {
-      const req = [
-        { siid: PROP_SWITCH.siid, piid: PROP_SWITCH.piid },
-        { siid: PROP_POWER_W.siid, piid: PROP_POWER_W.piid }
-      ];
-      const res = await this.device.call('get_properties', req);
-
-      const map = {};
-      if (Array.isArray(res) && res.length && typeof res[0] === 'object') {
-        res.forEach(r => map[`${r.siid}.${r.piid}`] = r.value);
-      } else {
-        res.forEach((v, i) => map[`${req[i].siid}.${req[i].piid}`] = v);
-      }
-
-      const onVal = map[this.key(PROP_SWITCH)];
-      const powerW = map[this.key(PROP_POWER_W)];
-      const on = typeof onVal !== 'undefined' ? !!onVal : this.state.on; // 값 없으면 유지
-      this.state.on = on;
-      this.state.powerW = (typeof powerW === 'number') ? powerW : this.state.powerW;
-
-      this.switchService.updateCharacteristic(Characteristic.On, on);
-
+      await this.miotPoll();
       if (this.mode === 'auto') this.mode = 'miot';
-      return;
     } catch (e) {
       const msg = `${e?.message || e}`;
-      if (this.mode !== 'legacy' && /get_properties.*not supported|Method.*not supported|-32601/i.test(msg)) {
+      this.dlog('MIoT 폴링 오류:', msg);
+      if (/get_properties.*not supported|Method.*not supported|-32601/i.test(msg)) {
         this.mode = 'legacy';
-        this.log.warn(this.prefix('MIoT(get_properties) 미지원 → Legacy(get_prop) 모드로 전환'));
+        this.log.warn(this.prefix('MIoT 미지원 → Legacy 모드 전환'));
         return this.legacyPoll();
-      } else {
-        this.log.error(this.prefix(`상태 폴링 실패: ${msg}`));
       }
+      // 다른 오류면 그대로 기록
+      this.log.error(this.prefix(`상태 폴링 실패(MIoT): ${msg}`));
     }
   }
 
-  // ===== MIoT set =====
+  // ===== MIoT =====
+  async miotPoll() {
+    const req = [
+      { siid: PROP_SWITCH.siid, piid: PROP_SWITCH.piid },
+      { siid: PROP_POWER_W.siid, piid: PROP_POWER_W.piid }
+    ];
+    this.dlog('MIoT get_properties 요청:', this.safeJSON(req));
+    const res = await this.device.call('get_properties', req);
+    this.dlog('MIoT 응답:', this.safeJSON(res));
+
+    const map = {};
+    if (Array.isArray(res) && res.length && typeof res[0] === 'object') {
+      res.forEach(r => map[`${r.siid}.${r.piid}`] = r.value);
+    } else {
+      res.forEach((v, i) => map[`${req[i].siid}.${req[i].piid}`] = v);
+    }
+
+    const onVal = map[this.key(PROP_SWITCH)];
+    const powerW = map[this.key(PROP_POWER_W)];
+    const on = (typeof onVal !== 'undefined') ? !!onVal : this.state.on;
+
+    this.state.on = on;
+    if (typeof powerW === 'number') this.state.powerW = powerW;
+
+    this.switchService.updateCharacteristic(Characteristic.On, on);
+  }
+
   async miotSet(prop, value) {
     if (!this.device) throw new Error('Device not connected');
     const payload = [{ siid: prop.siid, piid: prop.piid, value }];
+    this.dlog('MIoT set_properties:', this.safeJSON(payload));
     const res = await this.device.call('set_properties', payload);
+    this.dlog('MIoT set 응답:', this.safeJSON(res));
+
     if (Array.isArray(res)) {
       const ok = res.every(r => (typeof r === 'string' && r === 'ok') || (typeof r === 'object' && r.code === 0));
-      if (!ok) throw new Error(`기기 응답 오류: ${JSON.stringify(res)}`);
+      if (!ok) throw new Error(`기기 응답 오류: ${this.safeJSON(res)}`);
     } else if (res !== 'ok') {
       throw new Error(`기기 응답 오류: ${String(res)}`);
     }
     setTimeout(() => this.poll(), 250);
   }
 
-  // ===== Legacy (miIO) =====
-  // 상태 조회를 위한 키/메서드 후보들
+  // ===== Legacy =====
   get legacyKeyCombos() {
-    // 가장 일반적인 조합부터
     return [
       { method: 'get_prop', keys: ['on', 'power_consume_rate'] },
       { method: 'get_prop', keys: ['power', 'power_consume_rate'] },
       { method: 'get_prop', keys: ['relay_status', 'power_consume_rate'] },
       { method: 'get_prop', keys: ['switch', 'power_consume_rate'] },
       { method: 'get_prop', keys: ['state', 'power_consume_rate'] },
-      { method: 'get_prop', keys: ['enable'] },
+      { method: 'get_prop', keys: ['enable', 'power_consume_rate'] },
       { method: 'get_prop', keys: ['on'] },
       { method: 'get_prop', keys: ['power'] },
-      { method: 'get_status', keys: [] }, // 일부 기기는 객체/맵 반환
-      { method: 'get_power', keys: [] }   // 일부 기기는 단일 전원 상태만 반환
+      { method: 'get_status', keys: [] },
+      { method: 'get_power', keys: [] }
     ];
   }
 
@@ -229,7 +242,7 @@ class SingleSwitchDevice {
     if (typeof v === 'boolean') return v;
     if (typeof v === 'number') return v !== 0;
     if (typeof v === 'string') {
-      const s = v.toLowerCase();
+      const s = v.trim().toLowerCase();
       return s === 'on' || s === 'true' || s === '1';
     }
     return false;
@@ -238,25 +251,24 @@ class SingleSwitchDevice {
   async legacyPoll() {
     let on = undefined;
     let powerW = this.state.powerW;
+    let lastErr = null;
 
     for (const combo of this.legacyKeyCombos) {
       try {
-        let resp = await this.device.call(combo.method, combo.keys);
-        // 다양한 응답 형태를 처리
+        this.dlog('Legacy 요청:', combo.method, combo.keys);
+        const resp = await this.device.call(combo.method, combo.keys);
+        this.dlog('Legacy 응답:', this.safeJSON(resp));
+
         if (Array.isArray(resp)) {
-          // 키와 1:1 매핑
           combo.keys.forEach((k, idx) => {
             const val = resp[idx];
-            if (k === 'on' || k === 'power' || k === 'relay_status' || k === 'switch' || k === 'state' || k === 'enable') {
-              on = this.normalizeBool(val);
-            }
+            if (['on', 'power', 'relay_status', 'switch', 'state', 'enable'].includes(k)) on = this.normalizeBool(val);
             if (k === 'power_consume_rate' && typeof val !== 'undefined') {
               const n = Number(val);
               if (Number.isFinite(n)) powerW = n;
             }
           });
         } else if (typeof resp === 'object' && resp !== null) {
-          // 객체 맵
           const cand = resp.on ?? resp.power ?? resp.relay_status ?? resp.switch ?? resp.state ?? resp.enable;
           if (typeof cand !== 'undefined') on = this.normalizeBool(cand);
           const pw = resp.power_consume_rate ?? resp.load_power ?? resp.all_power;
@@ -264,59 +276,65 @@ class SingleSwitchDevice {
             const n = Number(pw);
             if (Number.isFinite(n)) powerW = n;
           }
-        } else if (typeof resp === 'string' || typeof resp === 'number' || typeof resp === 'boolean') {
-          // 단일 값 (get_power 류)
+        } else if (typeof resp !== 'undefined') {
           on = this.normalizeBool(resp);
         }
 
-        // 성공적으로 on 값을 결정했다면 종료
         if (typeof on !== 'undefined') break;
-      } catch (_) {
-        // 다음 후보 시도
+      } catch (e) {
+        lastErr = e;
       }
     }
 
-    // on 값을 아직도 못 구했으면 기존 상태 유지
-    if (typeof on === 'undefined') on = this.state.on;
+    if (typeof on === 'undefined') {
+      // 값을 못 찾았으면 기존 상태 유지 (UI 되돌아감 방지)
+      if (lastErr) this.log.error(this.prefix(`(Legacy) 상태 폴링 실패: ${lastErr.message || lastErr}`));
+      on = this.state.on;
+    }
 
     this.state.on = !!on;
     this.state.powerW = powerW;
 
-    // 홈킷에 반영
     try { this.switchService.updateCharacteristic(Characteristic.On, !!on); } catch (_) {}
   }
 
   async legacySetPower(value) {
     const arg = value ? 'on' : 'off';
 
-    // 1) 표준
+    // 1) set_power
     try {
+      this.dlog('Legacy set_power:', arg);
       const res = await this.device.call('set_power', [arg]);
+      this.dlog('Legacy set_power 응답:', this.safeJSON(res));
       if (res === 'ok' || (Array.isArray(res) && res[0] === 'ok')) {
         setTimeout(() => this.poll(), 250);
         return;
       }
-    } catch (_) {}
+    } catch (e) { this.dlog('set_power 오류:', e?.message || e); }
 
     // 2) set_on(true/false)
     try {
+      this.dlog('Legacy set_on:', value);
       const res2 = await this.device.call('set_on', [!!value]);
+      this.dlog('Legacy set_on 응답:', this.safeJSON(res2));
       if (res2 === 'ok' || (Array.isArray(res2) && res2[0] === 'ok')) {
         setTimeout(() => this.poll(), 250);
         return;
       }
-    } catch (_) {}
+    } catch (e) { this.dlog('set_on 오류:', e?.message || e); }
 
-    // 3) toggle_plug (value가 true면 on, false면 off와 동일 효과가 있는 모델도 있어 대부분 on/off 1회 호출로 대체)
-    try {
-      if (value) {
+    // 3) toggle_plug (켜기만 필요한 모델에서 보조적으로 사용)
+    if (value) {
+      try {
+        this.dlog('Legacy toggle_plug');
         const res3 = await this.device.call('toggle_plug', []);
+        this.dlog('Legacy toggle_plug 응답:', this.safeJSON(res3));
         if (res3 === 'ok' || (Array.isArray(res3) && res3[0] === 'ok')) {
           setTimeout(() => this.poll(), 250);
           return;
         }
-      }
-    } catch (_) {}
+      } catch (e) { this.dlog('toggle_plug 오류:', e?.message || e); }
+    }
 
     throw new Error('set_power / set_on / toggle_plug 모두 실패');
   }
