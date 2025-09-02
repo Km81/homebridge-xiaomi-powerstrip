@@ -3,7 +3,7 @@ const miio = require('miio');
 let PlatformAccessory, Service, Characteristic, UUIDGen;
 
 const PLATFORM_NAME = 'XiaomiPowerStripPlatform';
-const PLUGIN_NAME = '@km81/homebridge-xiaomi-powerstrip';
+const PLUGIN_NAME = 'homebridge-xiaomi-powerstrip'; // ← unscoped로 변경
 
 module.exports = (api) => {
   PlatformAccessory = api.platformAccessory;
