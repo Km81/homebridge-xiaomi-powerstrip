@@ -1,6 +1,6 @@
 {
   "name": "homebridge-xiaomi-powerstrip-km81",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Homebridge plugin for Xiaomi MiOT Power Strip (single unified switch control).",
   "main": "index.js",
   "keywords": [
