@@ -1,0 +1,1 @@
+module.exports = () => { console.log('Xiaomi Power Strip plugin loaded'); };

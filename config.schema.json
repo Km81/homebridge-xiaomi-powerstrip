@@ -1,0 +1,7 @@
+{
+  "pluginAlias": "XiaomiPowerStripPlatform",
+  "pluginType": "platform",
+  "schema": {
+    "type": "object"
+  }
+}
