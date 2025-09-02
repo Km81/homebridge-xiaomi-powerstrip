@@ -1,7 +1,109 @@
 {
   "pluginAlias": "XiaomiPowerStripPlatform",
   "pluginType": "platform",
+  "singular": true,
   "schema": {
-    "type": "object"
-  }
+    "type": "object",
+    "required": ["deviceCfgs"],
+    "properties": {
+      "deviceCfgs": {
+        "title": "Devices",
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "object",
+          "required": ["name", "ip", "token"],
+          "properties": {
+            "name": { "title": "Name (기기 이름)", "type": "string", "default": "Xiaomi Power Strip" },
+            "ip": { "title": "IP Address", "type": "string", "format": "ipv4" },
+            "token": { "title": "Token", "type": "string", "pattern": "^[A-Fa-f0-9]{32}$", "description": "miio 32자리 HEX 토큰" },
+            "serialNumber": { "title": "Serial Number (일련번호)", "type": "string" },
+
+            "outlets": {
+              "title": "Outlets (채널 목록)",
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": ["name", "siid", "piid"],
+                "properties": {
+                  "name": { "title": "Outlet Name (채널 이름)", "type": "string", "default": "Outlet 1" },
+                  "siid": { "title": "SIID", "type": "integer", "default": 2, "minimum": 1 },
+                  "piid": { "title": "PIID (switch:on)", "type": "integer", "default": 1, "minimum": 1 }
+                }
+              }
+            },
+
+            "temperature": {
+              "title": "Temperature Property (온도 속성)",
+              "type": "object",
+              "properties": {
+                "siid": { "title": "SIID", "type": "integer", "default": 2, "minimum": 1 },
+                "piid": { "title": "PIID (temperature)", "type": "integer", "default": 2, "minimum": 1 }
+              }
+            },
+
+            "power": {
+              "title": "Power Property (전력 속성)",
+              "type": "object",
+              "properties": {
+                "siid": { "title": "SIID", "type": "integer", "default": 3, "minimum": 1 },
+                "piid": { "title": "PIID (surge-power)", "type": "integer", "default": 1, "minimum": 1 }
+              }
+            },
+
+            "led": {
+              "title": "LED Property (표시등 속성)",
+              "type": "object",
+              "properties": {
+                "siid": { "title": "SIID", "type": "integer", "default": 4, "minimum": 1 },
+                "piid": { "title": "PIID (indicator-light:on)", "type": "integer", "default": 1, "minimum": 1 }
+              }
+            },
+
+            "powerInUseThreshold": { "title": "In Use 판단 전력(W)", "type": "number", "default": 1.0, "minimum": 0 },
+
+            "separateOutletAccessories": { "title": "채널을 별도 악세서리로 분리", "type": "boolean", "default": true },
+            "useSwitchInsteadOfOutlet": { "title": "Switch 서비스로 노출 (기본: Outlet)", "type": "boolean", "default": false },
+
+            "showTemperature": { "title": "온도 센서 표시", "type": "boolean", "default": true },
+            "separateTemperatureAccessory": { "title": "온도 별도 악세서리", "type": "boolean", "default": false },
+
+            "showLED": { "title": "LED 스위치 표시", "type": "boolean", "default": true },
+            "separateLedAccessory": { "title": "LED 별도 악세서리", "type": "boolean", "default": false },
+
+            "pollingInterval": { "title": "폴링 주기(ms)", "type": "integer", "default": 15000, "minimum": 3000 }
+          }
+        }
+      }
+    }
+  },
+  "layout": [
+    {
+      "key": "deviceCfgs",
+      "type": "array",
+      "title": "기기 목록 (ADD DEVICE로 추가)",
+      "items": [
+        "deviceCfgs[].name",
+        "deviceCfgs[].ip",
+        "deviceCfgs[].token",
+        "deviceCfgs[].serialNumber",
+        "deviceCfgs[].separateOutletAccessories",
+        "deviceCfgs[].useSwitchInsteadOfOutlet",
+        {
+          "key": "deviceCfgs[]..outlets",
+          "title": "Outlets (채널)"
+        },
+        "deviceCfgs[].powerInUseThreshold",
+        "deviceCfgs[].showTemperature",
+        "deviceCfgs[].separateTemperatureAccessory",
+        { "key": "deviceCfgs[]..temperature", "title": "Temperature Property" },
+        "deviceCfgs[].showLED",
+        "deviceCfgs[].separateLedAccessory",
+        { "key": "deviceCfgs[]..led", "title": "LED Property" },
+        { "key": "deviceCfgs[]..power", "title": "Power Property" },
+        "deviceCfgs[].pollingInterval"
+      ]
+    }
+  ]
 }
