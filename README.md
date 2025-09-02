@@ -1,29 +1,28 @@
 # homebridge-xiaomi-powerstrip-km81
 
-Homebridge plugin for controlling **Xiaomi Power Strip / Smart Plug** devices through HomeKit.  
-This plugin automatically detects whether the device uses the modern **MIoT protocol** or the legacy **miIO protocol**, 
-and adjusts communication accordingly.
+Homebridge에서 **샤오미 멀티탭 / 스마트 플러그**를 제어할 수 있는 플러그인입니다.  
+이 플러그인은 기기가 **MIoT 프로토콜**(get_properties/set_properties) 또는 **miIO 레거시 프로토콜**(get_prop/set_power)을 사용하는지 자동으로 감지하여 적절히 동작합니다.
 
-## ✨ Features
+## ✨ 주요 기능
 
-- Control Xiaomi Power Strip / Plug as a **single unified switch** in HomeKit
-- Auto-detects between MIoT (`get_properties`/`set_properties`) and legacy miIO (`get_prop` / `set_power`)
-- Polling interval configurable (default 15s, min 3s)
-- Optimistic updates (avoid "switch bouncing back" when toggling)
-- Debug logging option to troubleshoot unsupported methods
-- Optional **device model hint** to improve detection (e.g., `zimi.powerstrip.v2`, `chuangmi.plug.v3`)
+- 샤오미 멀티탭/플러그를 HomeKit에서 **단일 스위치**로 제어
+- MIoT ↔ miIO 프로토콜 자동 감지 및 전환
+- 폴링 주기 설정 가능 (기본 15초, 최소 3초)
+- 낙관적 업데이트(토글 시 상태가 되돌아가지 않도록 처리)
+- 디버그 로그 옵션 제공 (지원하지 않는 메서드 확인용)
+- 선택적으로 **기기 모델명 힌트**를 설정해 인식률 향상 (예: `zimi.powerstrip.v2`, `chuangmi.plug.v3`)
 
-## 🔧 Installation
+## 🔧 설치 방법
 
 ```bash
 npm install -g homebridge-xiaomi-powerstrip-km81
 ```
 
-or install through Homebridge UI by searching for `homebridge-xiaomi-powerstrip-km81`.
+또는 Homebridge UI에서 `homebridge-xiaomi-powerstrip-km81`를 검색하여 설치할 수 있습니다.
 
-## ⚙️ Configuration
+## ⚙️ 설정 예시
 
-Example `config.json`:
+`config.json` 예시:
 
 ```json
 {
@@ -32,7 +31,7 @@ Example `config.json`:
       "platform": "XiaomiPowerStripPlatform",
       "deviceCfgs": [
         {
-          "name": "Living Room Power",
+          "name": "거실 멀티탭",
           "ip": "192.168.1.55",
           "token": "YOUR32CHARTOKENHEXHERE",
           "serialNumber": "123456789",
@@ -47,31 +46,31 @@ Example `config.json`:
 }
 ```
 
-### Config Options
+### 설정 항목 설명
 
-| Key             | Type    | Default   | Description |
-|-----------------|---------|-----------|-------------|
-| `name`          | string  | `"Xiaomi Power Strip"` | Accessory name shown in HomeKit |
-| `ip`            | string  | required  | Device IP address |
-| `token`         | string  | required  | 32-char HEX token (extract via `miio` or other tools) |
-| `serialNumber`  | string  | optional  | Serial number shown in Home app |
-| `pollingInterval` | int   | 15000     | Polling interval in ms (min 3000) |
-| `model`         | string  | optional  | Device model hint (e.g., `chuangmi.plug.v3`) |
-| `protocolMode`  | enum    | `auto`    | `auto`, `miot`, or `legacy` |
-| `debug`         | boolean | false     | Enable debug logging |
+| 항목              | 타입    | 기본값   | 설명 |
+|------------------|---------|---------|------|
+| `name`           | string  | `"Xiaomi Power Strip"` | HomeKit에 표시될 이름 |
+| `ip`             | string  | 필수     | 기기의 IP 주소 |
+| `token`          | string  | 필수     | 32자리 HEX 토큰 (`miio` 툴 등으로 추출) |
+| `serialNumber`   | string  | 선택     | Home 앱에 표시될 일련번호 |
+| `pollingInterval`| int     | 15000    | 상태 폴링 주기(ms), 최소 3000 |
+| `model`          | string  | 선택     | 기기 모델 힌트 (예: `chuangmi.plug.v3`) |
+| `protocolMode`   | enum    | `auto`   | `auto`, `miot`, `legacy` 중 선택 |
+| `debug`          | boolean | false    | 디버그 로그 출력 여부 |
 
-## 🛠 Troubleshooting
+## 🛠 문제 해결
 
-- If HomeKit toggles but state resets to off → set `protocolMode` to `legacy` and enable `debug`.  
-  Check logs to see which property key (`power`, `relay_status`, etc.) reports the correct state.
-- Provide `model` if detection fails.
+- HomeKit에서 스위치를 켰는데 다시 꺼짐으로 돌아간다면 → `protocolMode`를 `legacy`로 설정하고 `debug`를 켜세요.  
+  로그를 확인해 어떤 속성(`power`, `relay_status` 등)이 실제 상태를 반환하는지 확인할 수 있습니다.
+- 특정 모델은 `model` 값을 직접 지정하면 인식률이 더 좋아집니다.
 
-## 📌 Notes
+## 📌 참고 사항
 
-- This plugin is optimized for **single-switch Xiaomi Power Strips / Plugs**.  
-- Multi-outlet devices (6 sockets, etc.) are treated as **one unified switch**, not per-outlet control.  
-- LED control / temperature sensors are not exposed in this simplified version.
+- 이 플러그인은 **단일 스위치 제어용 샤오미 멀티탭 / 플러그**를 대상으로 최적화되어 있습니다.  
+- 6구 멀티탭 등 다채널 제품도 **하나의 스위치로 통합 제어**됩니다 (개별 콘센트 제어는 불가).  
+- LED 제어, 온도 센서 등은 단순화를 위해 노출하지 않습니다.
 
-## 📜 License
+## 📜 라이선스
 
 MIT © Km81
