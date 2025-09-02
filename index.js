@@ -206,7 +206,59 @@ class DeviceHandler {
         }
       });
     });
+
+    // Temperature
+    if (this.showTemperature) {
+      const name = `${this.config.name} Temperature`;
+      const svc = this.accessory.getServiceById(Service.TemperatureSensor, 'Temperature')
+        || this.accessory.addService(Service.TemperatureSensor, name, 'Temperature');
+      this.setServiceName(svc, name);
+      this.children.temp = { acc: this.accessory, svc };
+    }
+
+    // LED
+    if (this.showLED) {
+      const name = `${this.config.name} LED`;
+      const svc = this.accessory.getServiceById(Service.Switch, 'LED')
+        || this.accessory.addService(Service.Switch, name, 'LED');
+      this.setServiceName(svc, name);
+      this.children.led = { acc: this.accessory, svc };
+      svc.getCharacteristic(Characteristic.On).onSet(async (v) => {
+        try { await this.miotSet(this.ledProp, !!v); }
+        catch (e) { this.log.error(this.prefix(`LED 설정 실패: ${e.message}`)); throw e; }
+      });
+    }
   }
 
   setupAccessoryInfo() {
-    const info = this.accessory.getService(Service.AccessoryInformation
+    const info = this.accessory.getService(Service.AccessoryInformation);
+    info.setCharacteristic(Characteristic.Manufacturer, 'Xiaomi')
+        .setCharacteristic(Characteristic.Model, 'PowerStrip/Plug (MiOT)')
+        .setCharacteristic(Characteristic.SerialNumber, this.config.serialNumber || this.config.ip || 'Unknown');
+  }
+
+  updateAllCharacteristics() {
+    // Outlets
+    this.outletSvcs.forEach(({ svc, outletIdx }) => {
+      const on = !!this.state[`outlet_${outletIdx}_on`];
+      svc.updateCharacteristic(Characteristic.On, on);
+      if (svc.testCharacteristic && svc.testCharacteristic(Characteristic.OutletInUse)) {
+        const power = Number(this.state.powerW);
+        const inUse = Number.isFinite(power) ? power > this.powerInUseThreshold : on;
+        try { svc.updateCharacteristic(Characteristic.OutletInUse, inUse); } catch (_) {}
+      }
+    });
+
+    // Temperature
+    if (this.children?.temp?.svc) {
+      const t = Number(this.state.temperature);
+      const value = Number.isFinite(t) ? t : 0;
+      this.children.temp.svc.updateCharacteristic(Characteristic.CurrentTemperature, value);
+    }
+
+    // LED
+    if (this.children?.led?.svc) {
+      this.children.led.svc.updateCharacteristic(Characteristic.On, !!this.state.ledOn);
+    }
+  }
+}
